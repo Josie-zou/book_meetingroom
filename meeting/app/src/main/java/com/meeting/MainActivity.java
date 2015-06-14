@@ -8,6 +8,7 @@ import android.os.Handler;
 import android.os.Message;
 import android.support.v7.app.ActionBarActivity;
 import android.os.Bundle;
+import android.util.Log;
 import android.view.Menu;
 import android.view.MenuItem;
 import android.view.View;
@@ -18,14 +19,25 @@ import android.widget.EditText;
 import android.widget.RelativeLayout;
 import android.widget.Toast;
 
+import org.apache.http.NameValuePair;
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.UnsupportedEncodingException;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.net.URLEncoder;
+import java.util.ArrayList;
 import java.util.Calendar;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Callable;
 
 
@@ -42,9 +54,12 @@ public class MainActivity extends Activity {
     private int roomselected;
     private  int daytimeselected;
     private String[] daytime = new String[]{"Morning", "Afternoon"};
-    private String baseURL = "http://172.20.0.17:8080/meeting_server//servlet/meetingrooms";
+    private String baseURL = "http://192.168.1.109:8080/meeting_server/servlet/meetingrooms";
+    private  String  bookURL = "http://192.168.1.109:8080/meeting_server/servlet/book";
     private HttpURLConnection connection;
     public String responseString;
+    public List<String> list;
+    public String result;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -59,14 +74,25 @@ public class MainActivity extends Activity {
                 super.handleMessage(msg);
                 switch (msg.what){
                     case 1:
-                        Toast.makeText(getApplicationContext(), responseString.toString(),Toast.LENGTH_SHORT).show();
-//                        showrooms();
+                        rooms = new String[list.size()];
+                        list.toArray(rooms);
+//                        Toast.makeText(getApplicationContext(), list.toString(),Toast.LENGTH_SHORT).show();
+                        showrooms();
                         break;
+                    case  2:
+                        Toast.makeText(getApplication(), result, Toast.LENGTH_SHORT).show();
                     default:
                         break;
                 }
             }
         };
+//        loadrooms();
+    }
+
+    private void loadrooms() {
+
+        Thread thread = new Thread(runnable);
+        thread.start();
     }
 
     private void showrooms() {
@@ -124,7 +150,18 @@ public class MainActivity extends Activity {
                     connection.setRequestMethod("POST");
                     connection.setDoInput(true);
                     connection.setDoOutput(true);
+                    connection.setConnectTimeout(3000);
                     connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+//                    type=getrooms
+                    StringBuffer stringbuffer = new StringBuffer();
+                    stringbuffer.append("type").append("=").append(URLEncoder.encode("getrooms", "utf-8"));
+                    byte[] data3 = stringbuffer.toString().getBytes();
+                    OutputStream outputstream = connection.getOutputStream();
+                    outputstream.write(data3);
+                    outputstream.close();
+
+
+
                     int responsecode = connection.getResponseCode();
                     if (responsecode == HttpURLConnection.HTTP_OK)
                     {
@@ -137,14 +174,26 @@ public class MainActivity extends Activity {
                             byteArrayOutputStream.write(data2, 0, length);
                         }
                         responseString =new String(byteArrayOutputStream.toByteArray());
+                        list = new ArrayList<String>();
+                        JSONArray jsonArray = new JSONObject(responseString).getJSONArray("rooms");
+                        for (int i = 0; i < jsonArray.length(); i++)
+                        {
+                            JSONObject jsonObject = jsonArray.getJSONObject(i);
+                            list.add(jsonObject.getString("roomid"));
+                        }
+                        inputStream.close();
+
                         Message message = new Message();
                         message.what = 1;
                         handle.sendMessage(message);
+
                     }
 
                 } catch (MalformedURLException e) {
                     e.printStackTrace();
                 } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (JSONException e) {
                     e.printStackTrace();
                 }
 
@@ -241,12 +290,93 @@ public class MainActivity extends Activity {
         });
 
 
+
+
+
+        final Runnable runnable1 = new Runnable() {
+            @Override
+            public void run() {
+
+                try {
+                    URL url1 = new URL(bookURL);
+                    HttpURLConnection connection1 = (HttpURLConnection) url1.openConnection();
+                    connection1.setRequestMethod("POST");
+                    connection1.setDoOutput(true);
+                    connection1.setDoInput(true);
+                    connection1.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+//                    connection1.setRequestProperty("Content-Type", "text/html;charset=utf-8");
+                    connection1.setConnectTimeout(3000);
+
+                    String requeststring = getalldata().toString().trim();
+                    byte[] data1 = requeststring.getBytes();
+                    OutputStream outputStream = connection1.getOutputStream();
+                    outputStream.write(data1);
+                    outputStream.close();
+                    int responsecode1 = connection1.getResponseCode();
+                    if (responsecode1 == HttpURLConnection.HTTP_OK)
+                    {
+                        InputStream inputStream = connection1.getInputStream();
+                        ByteArrayOutputStream byteArrayOutputStream = new ByteArrayOutputStream();
+                        byte[] data3 = new byte[1024];
+                        int length = 0;
+                        while ((length = inputStream.read(data3)) != -1)
+                        {
+                            byteArrayOutputStream.write(data3, 0, length);
+                        }
+                        String  response =new String(byteArrayOutputStream.toByteArray());
+                        list = new ArrayList<String>();
+                        JSONObject jsonObject = new JSONObject(response);
+                        result = jsonObject.getString("result");
+//                        for (int i = 0; i < jsonArray.length(); i++)
+//                        {
+//                            JSONObject jsonObject = jsonArray.getJSONObject(i);
+//                            list.add(jsonObject.getString("roomid"));
+//                        }
+                        inputStream.close();
+                        Message message = new Message();
+                        message.what = 2;
+                        handle.sendMessage(message);
+
+                    }
+
+
+
+                } catch (IOException e) {
+                    e.printStackTrace();
+                } catch (JSONException e) {
+                    e.printStackTrace();
+                }
+            }
+        };
+
+
         sure.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
 
+              Thread thread = new Thread(runnable1);
+              thread.start();
+
             }
         });
+    }
+
+    private String getalldata() {
+
+        StringBuffer stringBuffer = new StringBuffer();
+        try {
+//            stringBuffer.append("typename=bookroom");
+            stringBuffer.append("typename=").append(URLEncoder.encode("bookroom", "utf-8"));
+            stringBuffer.append("&").append("room=").append(URLEncoder.encode(ET_meetings.getText().toString().trim(), "utf-8")).append("&");
+            stringBuffer.append("datetime=").append(URLEncoder.encode(ET_date.getText().toString().trim(), "utf-8")).append("&");
+            stringBuffer.append("daytime=").append(URLEncoder.encode(ET_daytime.getText().toString().trim(), "utf-8"));
+        } catch (UnsupportedEncodingException e) {
+            e.printStackTrace();
+        }
+        Log.i("va",stringBuffer.toString());
+        return  stringBuffer.toString();
+
+
     }
 
 
